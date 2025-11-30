@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 def preprocess_data(file_path):
     print("\n Starting data preprocessing...\n")
@@ -22,5 +23,9 @@ def preprocess_data(file_path):
     # encode categorical data
     X = pd.get_dummies(X)
 
+    # Scale the data (VERY important for ML)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
     print("\n Data preprocessing complete")
-    return X, y
+    return X_scaled, y

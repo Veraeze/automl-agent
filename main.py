@@ -11,7 +11,7 @@ def run_agent():
     if file_path:
         X, y = preprocess_data(file_path)
         trained_models = train_models(X, y)
-        results = evaluate_models(trained_models)
+        results = evaluate_models(trained_models, dataset_name)
         select_and_save_best_model(results)
 
         print("\n AutoML process complete.\n")
