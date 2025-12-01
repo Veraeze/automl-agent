@@ -11,6 +11,7 @@ def download_dataset():
 
     name = dataset["name"]
     url = dataset["url"]
+    goal = dataset.get("goal", "No goal specified")   
 
     print(f"\n Selected dataset: {name}")
     print(f" Downloading from: {url}")
@@ -32,7 +33,7 @@ def download_dataset():
             file.write(response.content)
 
         print(f" Dataset saved successfully: {file_path}")
-        return file_path, name
+        return file_path, name, goal
 
     else:
         print(" Dataset download failed")
