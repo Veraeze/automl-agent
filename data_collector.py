@@ -23,7 +23,7 @@ def download_dataset():
     safe_name = name.lower().replace(" ", "_")
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    file_path = f"data/{safe_name}_{timestamp}.csv"
+    file_path = f"data/{safe_name}.csv"
     # Request the file from the internet
     response = requests.get(url)
 
@@ -34,7 +34,6 @@ def download_dataset():
 
         print(f" Dataset saved successfully: {file_path}")
         return file_path, name, goal
-
     else:
         print(" Dataset download failed")
         return None, None
