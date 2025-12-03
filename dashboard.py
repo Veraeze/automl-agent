@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 import os
 import matplotlib.pyplot as plt
 import joblib
@@ -14,29 +15,27 @@ st.title("AutoML Agent Dashboard")
 
 DATASET_GOALS = {d["name"]: d.get("goal", "") for d in DATASET_SOURCES}
 
-# Sidebar: dataset uploader
-uploaded_file = st.sidebar.file_uploader("Upload a CSV dataset", type=["csv"])
+# Sample datasets (from config.py)
+SAMPLE_DATASET_NAMES = [d["name"] for d in DATASET_SOURCES]
+SAMPLE_DATASET_URLS = {d["name"]: d["url"] for d in DATASET_SOURCES}
 
-# Sidebar: select from existing datasets
-existing_files = [f for f in os.listdir("data") if f.endswith(".csv")]
-if existing_files:
-    selected_existing = st.sidebar.selectbox(
-        "Select existing dataset",
-        existing_files,
-        key="existing_selectbox"
-    )
-    if selected_existing:
-        st.session_state['selected_dataset'] = os.path.join("data", selected_existing)
-        st.session_state['uploaded_active'] = False
+st.sidebar.markdown("### Upload a CSV dataset")
+uploaded_file = st.sidebar.file_uploader("Upload a CSV dataset", type=["csv"], key="uploader")
+
 MAX_COLUMNS = 20
 MAX_ROWS = 5000
 
 if 'selected_dataset' not in st.session_state:
     st.session_state['selected_dataset'] = None
+if 'user_goal' not in st.session_state:
+    st.session_state['user_goal'] = ""
+if 'user_target_column' not in st.session_state:
+    st.session_state['user_target_column'] = None
 
 if uploaded_file is not None:
     try:
         uploaded_df = pd.read_csv(uploaded_file)
+        st.session_state['uploaded_columns'] = list(uploaded_df.columns)
         st.session_state['uploaded_active'] = True
         n_rows, n_cols = uploaded_df.shape
         if n_cols > MAX_COLUMNS or n_rows > MAX_ROWS:
@@ -54,27 +53,112 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"Could not read uploaded file: {e}")
 
-st.sidebar.markdown("---")
+# st.sidebar.markdown("### Training Details (Uploaded Dataset Only)")
+# st.sidebar.subheader("Training Details (Required for Uploaded Dataset)")
+
+if st.session_state.get("uploaded_active"):
+    # Goal input (from user)
+    user_goal = st.sidebar.text_area(
+        "What is the goal of this dataset?",
+        value=st.session_state.get("user_goal", ""),
+        placeholder="e.g. Predict house prices using features..."
+    )
+    st.session_state['user_goal'] = user_goal
+
+    # Target column selector (only show if file has been uploaded or selected)
+    if st.session_state.get("selected_dataset") is not None:
+        try:
+            temp_df = pd.read_csv(st.session_state['selected_dataset'])
+            target_column = st.sidebar.selectbox(
+                "Select target column",
+                options=temp_df.columns.tolist()
+            )
+            st.session_state['user_target_column'] = target_column
+        except Exception:
+            pass
+    else:
+        st.sidebar.info("Upload or select a dataset to choose target column.")
+else:
+    st.sidebar.info("Using predefined dataset goal and target settings.")
+
+# Sidebar: select from user-uploaded datasets (only)
+# Only show datasets that were uploaded by users (exclude sample datasets from config.py)
+existing_files = [f for f in os.listdir("data") if f.endswith(".csv")]
+user_uploaded_files = []
+
+for f in existing_files:
+    clean_name = os.path.splitext(f)[0]
+    # if the name does NOT match any sample dataset name, treat it as user-uploaded
+    if clean_name not in SAMPLE_DATASET_NAMES:
+        user_uploaded_files.append(f)
+
+st.sidebar.markdown("### User Uploaded Datasets")
+
+if user_uploaded_files:
+    selected_existing = st.sidebar.selectbox(
+        "Select an uploaded dataset",
+        user_uploaded_files,
+        key="existing_selectbox"
+    )
+    if selected_existing:
+        st.session_state['selected_dataset'] = os.path.join("data", selected_existing)
+        st.session_state['uploaded_active'] = False
+else:
+    st.sidebar.info("No user-uploaded datasets found yet.")
+
+st.sidebar.markdown("### Sample Datasets (From Config)")
+
+sample_choice = st.sidebar.selectbox(
+    "Select a sample dataset",
+    SAMPLE_DATASET_NAMES,
+    key="sample_selectbox"
+)
+
+if sample_choice:
+    sample_url = SAMPLE_DATASET_URLS[sample_choice]
+    safe_name = sample_choice.replace(" ", "_").lower()
+    sample_path = os.path.join("data", f"{safe_name}.csv")
+
+    if not os.path.exists(sample_path):
+        try:
+            response = requests.get(sample_url, verify=False, timeout=20)
+            response.raise_for_status()
+            with open(sample_path, "wb") as f:
+                f.write(response.content)
+        except Exception as e:
+            st.sidebar.error(f"Could not load sample dataset: {e}")
+            st.stop()
+
+    st.session_state['selected_dataset'] = sample_path
+    st.session_state['uploaded_active'] = False
+
 # Custom styled button (green, more visible)
-st.markdown(
-    """
+# st.sidebar.markdown("### Run AutoML Agent")
+st.sidebar.markdown("""
     <style>
     div.stButton > button {
-        background-color: #14532d;
+        background-color: #0B3D1F; /* dark green */
         color: white;
         border-radius: 8px;
-        padding: 0.5em 1.2em;
+        height: 3em;
+        width: 100%;
         font-weight: 600;
-    }
-    div.stButton > button:hover {
-        background-color: #0f3620;
-        color: white;
+        font-size: 18px;
     }
     </style>
-    """,
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
+
 train_clicked = st.sidebar.button("Run AutoML Agent")
+
+if train_clicked:
+    if st.session_state.get("uploaded_active"):
+        if not st.session_state.get("user_goal"):
+            st.sidebar.error("You must enter a goal before running the agent.")
+            st.stop()
+
+        if not st.session_state.get("user_target_column"):
+            st.sidebar.error("You must select a target column before running the agent.")
+            st.stop()
 
 if train_clicked is False:
     st.info("Select a dataset from the left or upload one, then click **Run AutoML Agent**.")
@@ -101,13 +185,13 @@ for i in range(100):
     time.sleep(0.01)
     progress.progress(i + 1)
 
-st.success("AutoML training and analysis complete ✅")
+st.success("AutoML training and analysis complete ")
 
 df = pd.read_csv(dataset_to_use)
 
-st.subheader("Target column for training")
-target_column = st.selectbox("Select target column", options=df.columns)
-st.session_state['target_column'] = target_column
+st.subheader("Selected Target Column")
+st.write(f"Target column: **{st.session_state['user_target_column']}**")
+st.session_state['target_column'] = st.session_state['user_target_column']
 
 # Display dataset stats
 display_name = os.path.basename(dataset_to_use).rsplit('.',1)[0]
@@ -118,8 +202,10 @@ for entry in DATASET_SOURCES:
     if display_name.lower() in entry["name"].lower():
         dataset_goal = entry.get("goal", "")
         break
-if dataset_goal:
-    st.info(f"Goal: {dataset_goal}")
+if st.session_state.get("uploaded_active") and st.session_state.get("user_goal"):
+    st.info(f"User-defined goal: {st.session_state['user_goal']}")
+elif dataset_goal:
+    st.info(f"Dataset goal: {dataset_goal}")
 
 st.write(f"Rows: {df.shape[0]}, Columns: {df.shape[1]}")
 st.dataframe(df.head(10))
