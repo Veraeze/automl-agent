@@ -4,9 +4,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-def perform_pre_training_eda(df):
-    # Create directory for saving plots
-    save_dir = "eda_charts/pre_training"
+def perform_pre_training_eda(df, dataset_name):
+    # Clean dataset name for folder
+    safe_name = dataset_name.replace(" ", "_").lower()
+    save_dir = os.path.join("eda_charts", safe_name, "pre_training")
     os.makedirs(save_dir, exist_ok=True)
 
     # Select numeric columns
@@ -29,40 +30,49 @@ def perform_pre_training_eda(df):
         plt.close()
 
     # Correlation heatmap
-    plt.figure(figsize=(12, 10))
-    corr = df[numeric_cols].corr()
-    sns.heatmap(corr, annot=True, fmt=".2f", cmap='coolwarm', square=True)
-    plt.title('Correlation Heatmap')
-    plt.savefig(f"{save_dir}/correlation_heatmap.png")
-    plt.close()
+    if numeric_cols:
+        plt.figure(figsize=(12, 10))
+        corr = df[numeric_cols].corr()
+        sns.heatmap(corr, annot=True, fmt=".2f", cmap='coolwarm', square=True)
+        plt.title('Correlation Heatmap')
+        plt.savefig(f"{save_dir}/correlation_heatmap.png")
+        plt.close()
+
 
 def preprocess_data(file_path):
-    print("\n Starting data preprocessing...\n")
+    print("\nStarting data preprocessing...\n")
 
-    # Load dataset
-    df = pd.read_csv(file_path)
+    # Try reading CSV with comma, fallback to semicolon
+    try:
+        df = pd.read_csv(file_path)
+        if len(df.columns) == 1:
+            df = pd.read_csv(file_path, sep=';')
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return None, None
 
-    # If dataset has no headers, create some
+    # Handle missing headers
     if df.columns.tolist()[0].startswith("Unnamed"):
         df.columns = [f"column_{i}" for i in range(len(df.columns))]
 
     print("Columns detected:", df.columns.tolist())
 
-    # drop rows with missing values
+    # Drop rows with missing values
     df = df.dropna()
 
-    perform_pre_training_eda(df)
+    dataset_name = os.path.splitext(os.path.basename(file_path))[0]
+    perform_pre_training_eda(df, dataset_name)
 
-    # assume last column is the target
+    # Assume last column is target
     X = df.iloc[:, :-1]
     y = df.iloc[:, -1]
 
-    # encode categorical data
+    # Encode categorical features
     X = pd.get_dummies(X)
 
-    # Scale the data (VERY important for ML)
+    # Scale numeric features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    print("\n Data preprocessing complete")
+    print("\nData preprocessing complete")
     return X_scaled, y
