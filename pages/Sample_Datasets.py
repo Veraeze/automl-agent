@@ -4,6 +4,7 @@ import os
 import requests
 import tempfile
 import shutil
+import joblib
 
 from config import DATASET_SOURCES
 from preprocessor import preprocess_data
@@ -29,6 +30,7 @@ sample_choice = st.sidebar.selectbox("Select a dataset", SAMPLE_DATASET_NAMES)
 safe_name = sample_choice.replace(" ", "_").lower()
 sample_path = os.path.join("data", f"{safe_name}.csv")
 
+# Download dataset if not present
 if not os.path.exists(sample_path):
     try:
         response = requests.get(SAMPLE_DATASET_URLS[sample_choice], verify=False, timeout=20)
@@ -85,7 +87,7 @@ with st.spinner("Running AutoML Agent..."):
         progress.progress(90)
         select_and_save_best_model(results)
         progress.progress(100)
-        st.success("AutoML Agent completed successfully ✅")
+        st.success("AutoML Agent completed successfully ")
     finally:
         shutil.rmtree(tmp_dir)
 
@@ -103,3 +105,43 @@ report_path = os.path.join("reports", f"{display_name.replace(' ','_').lower()}_
 if os.path.exists(report_path):
     with open(report_path, "r") as f:
         st.text(f.read())
+
+# -------------------- Pre-training EDA Charts --------------------
+st.subheader("Pre-training EDA Charts")
+pre_training_path = os.path.join("eda_charts", safe_name, "pre_training")
+if os.path.exists(pre_training_path):
+    pre_training_images = [f for f in os.listdir(pre_training_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+    for img_file in pre_training_images:
+        st.image(os.path.join(pre_training_path, img_file), use_container_width=True)
+
+# -------------------- Post-training EDA Charts --------------------
+st.subheader("Post-training EDA Charts")
+post_training_path = os.path.join("eda_charts", safe_name, "post_training")
+if os.path.exists(post_training_path):
+    post_training_images = [f for f in os.listdir(post_training_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+    for img_file in post_training_images:
+        st.image(os.path.join(post_training_path, img_file), use_container_width=True)
+
+# -------------------- Trained Models --------------------
+st.subheader("Trained Models")
+model_files = [f for f in os.listdir("models") if f.startswith(safe_name) and f.endswith(('.pkl', '.joblib'))]
+if not model_files:
+    st.write("No trained models found for this dataset in the models/ directory.")
+else:
+    for model_file in model_files:
+        st.markdown(f"### Model: {model_file}")
+        model_path = os.path.join("models", model_file)
+        try:
+            model = joblib.load(model_path)
+            st.write(model)
+        except Exception as e:
+            st.write(f"Could not load model {model_file}: {e}")
+            continue
+
+        with open(model_path, "rb") as file:
+            st.download_button(
+                label=f"Download Model {model_file}",
+                data=file,
+                file_name=model_file,
+                mime="application/octet-stream"
+            )
